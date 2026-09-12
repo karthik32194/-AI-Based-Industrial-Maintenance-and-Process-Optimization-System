@@ -1,0 +1,120 @@
+{
+  "step2_data_target_audit": {
+    "rows": 1000,
+    "columns": [
+      "temperature",
+      "vibration",
+      "pressure",
+      "humidity",
+      "rotation_speed",
+      "voltage",
+      "current",
+      "oil_level",
+      "load",
+      "motor_temperature",
+      "gearbox_temperature",
+      "sound_level",
+      "fan_speed",
+      "reactive_power",
+      "active_power",
+      "machine_failure",
+      "timestamp"
+    ],
+    "target": "machine_failure",
+    "target_present": true,
+    "target_counts": {
+      "0": 838,
+      "1": 162
+    },
+    "failure_rate": 0.162,
+    "ml_columns_totally_numeric": true,
+    "ml_columns_nan_count": 0
+  },
+  "artifact_dataset_hash_verified": {
+    "csv_sha256": "7796bdba32a09391cd76b09a04f0e72cdfa5545037d01b2064b2948ff3510207",
+    "failure_artifact_hash": "7796bdba32a09391cd76b09a04f0e72cdfa5545037d01b2064b2948ff3510207",
+    "anomaly_artifact_hash": "7796bdba32a09391cd76b09a04f0e72cdfa5545037d01b2064b2948ff3510207",
+    "failure_hash_matches": true,
+    "anomaly_hash_matches": true
+  },
+  "anomaly_contamination": 0.05,
+  "feature_count": 15,
+  "step3_leakage_audit": {
+    "target_absolutely_not_in_features": true,
+    "no_temporal_in_features": true,
+    "preprocessor_fitted_train_only_medians_match": true,
+    "anomaly_threshold_is_train_quantile": true,
+    "train_test_partitions_disjoint": true,
+    "train_rows": 800,
+    "test_rows": 200
+  },
+  "step45_consistency_reproducibility": {
+    "train_serve_transform_agree": true,
+    "refit_score_vector_matches_persisted": true,
+    "refit_threshold": 0.15,
+    "persisted_threshold": 0.15,
+    "median_imputation_identical": true,
+    "anomaly_refit_scores_match": true,
+    "anomaly_refit_threshold_matches": true
+  },
+  "step6_frozen_revalidation": {
+    "n": 200,
+    "predicted_positives_int": 58,
+    "metrics": {
+      "accuracy": 0.73,
+      "precision": 0.3103,
+      "recall": 0.5625,
+      "f1_score": 0.4,
+      "confusion_matrix": [
+        [
+          128,
+          40
+        ],
+        [
+          14,
+          18
+        ]
+      ],
+      "roc_auc": 0.7889,
+      "pr_auc": 0.4139
+    },
+    "threshold_used": 0.15
+  },
+  "step7_threshold_boundary": {
+    "locked_threshold": 0.15,
+    "persisted_threshold": 0.15,
+    "threshold_matches_locked": true,
+    "risk_flag_consistent_with_threshold_all_rows": true
+  },
+  "step8_anomaly_validation": {
+    "flagged_rate_on_test": 0.045,
+    "operating_contamination": 0.05,
+    "finite_scores": true,
+    "score_is_deviation_not_probability": true,
+    "anomaly_types_generic_only": true
+  },
+  "step11_robustness": {
+    "all_missing": {
+      "finite": true,
+      "risk_flag": false
+    },
+    "non_numeric_nan": {
+      "finite": true,
+      "risk_flag": false
+    },
+    "extreme_values": {
+      "finite": true,
+      "risk_flag": false
+    },
+    "missing_one_column": {
+      "finite": true,
+      "risk_flag": false
+    },
+    "all_robustness_cases_finite": true
+  },
+  "step12_determinism": {
+    "failure_inference_deterministic": true,
+    "anomaly_inference_deterministic": true,
+    "dataset_hash_sha256": true
+  }
+}

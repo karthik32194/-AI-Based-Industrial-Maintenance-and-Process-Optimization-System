@@ -1,15 +1,11 @@
 """
-Unit tests for ML pipeline — Section 16
-Tests: preprocessing, feature engineering, anomaly detection, failure prediction.
+Unit tests for ML pipeline.
+Tests: preprocessing, feature engineering, anomaly detection.
+Failure-risk prediction tests live in test_failure_risk.py (Phase 4).
 """
-import numpy as np
-import pytest
-
 from app.ml.preprocessing import preprocess_sensor_data, preprocess_single, validate_reading
 from app.ml.features import engineer_features, get_feature_names
-from app.ml.prediction import predict_failure, _classify_risk, _classify_health
 from app.ml.anomaly import detect_anomaly
-from app.models.prediction import RiskLevel, MachineHealthStatus
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +44,7 @@ def test_preprocess_single():
 
 
 # ---------------------------------------------------------------------------
-# Feature engineering tests
+# Feature engineering tests (legacy spec surface; not used by Phase 4 model)
 # ---------------------------------------------------------------------------
 
 def test_engineer_features_columns():
@@ -65,47 +61,8 @@ def test_feature_count():
 
 
 # ---------------------------------------------------------------------------
-# Risk / health classification tests
+# Anomaly detection returns dict
 # ---------------------------------------------------------------------------
-
-def test_classify_risk_low():
-    assert _classify_risk(0.1) == RiskLevel.LOW
-
-def test_classify_risk_medium():
-    assert _classify_risk(0.3) == RiskLevel.MEDIUM
-
-def test_classify_risk_high():
-    assert _classify_risk(0.6) == RiskLevel.HIGH
-
-def test_classify_risk_critical():
-    assert _classify_risk(0.9) == RiskLevel.CRITICAL
-
-def test_classify_health_healthy():
-    assert _classify_health(90) == MachineHealthStatus.HEALTHY
-
-def test_classify_health_critical():
-    assert _classify_health(20) == MachineHealthStatus.CRITICAL
-
-
-# ---------------------------------------------------------------------------
-# Inference tests (rule-based fallback — no trained model required)
-# ---------------------------------------------------------------------------
-
-def test_predict_failure_normal_reading():
-    reading = {"temperature": 60.0, "vibration": 2.0, "pressure": 3.0, "rpm": 1200.0, "power_consumption": 30.0}
-    result = predict_failure(reading)
-    assert "failure_probability" in result
-    assert 0.0 <= result["failure_probability"] <= 1.0
-    assert result["risk_level"] in list(RiskLevel)
-    assert result["health_score"] >= 0.0
-
-
-def test_predict_failure_high_temp():
-    reading = {"temperature": 400.0, "vibration": 80.0, "pressure": 3.0, "rpm": 1200.0, "power_consumption": 30.0}
-    result = predict_failure(reading)
-    # High temp/vibration should produce elevated risk
-    assert result["failure_probability"] > 0.0
-
 
 def test_detect_anomaly_returns_dict():
     reading = {"temperature": 80.0, "vibration": 3.5, "pressure": 5.0, "rpm": 1500.0, "power_consumption": 45.0}

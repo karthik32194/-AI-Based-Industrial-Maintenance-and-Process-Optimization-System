@@ -28,7 +28,7 @@ Users → Frontend → FastAPI API Layer → Service Layer
 | Database | PostgreSQL 16 |
 | Vector Storage | pgvector |
 | Migrations | Alembic |
-| ML | scikit-learn (IsolationForest + RandomForest) |
+| ML | scikit-learn (IsolationForest + HistGradientBoostingClassifier) |
 | Data Processing | Pandas, NumPy |
 | LLM | OpenAI GPT-4o |
 | Embeddings | OpenAI text-embedding-3-small |
@@ -68,10 +68,12 @@ backend/
 │   │   ├── prediction_service.py
 │   │   └── ai_service.py
 │   ├── ml/                   # ML pipeline
-│   │   ├── preprocessing.py  # Cleaning + imputation
-│   │   ├── features.py       # Feature engineering (15 features)
-│   │   ├── anomaly.py        # IsolationForest
-│   │   ├── prediction.py     # RandomForest failure prediction
+│   │   ├── contract.py       # ML data contract (15-var feature schema)
+│   │   ├── preprocessing.py  # Fitted median imputation (train-only)
+│   │   ├── features.py       # (legacy 5-channel engineered path; superseded)
+│   │   ├── anomaly.py        # IsolationForest (contamination 0.05)
+│   │   ├── prediction.py     # HistGradientBoostingClassifier failure-risk
+│   │   ├── service.py        # ML integration boundary (ML_UNAVAILABLE safe)
 │   │   └── evaluation.py     # Metrics
 │   ├── rag/                  # RAG pipeline
 │   │   ├── loader.py         # PDF / DOCX / TXT loading
@@ -195,12 +197,12 @@ docker-compose exec backend alembic upgrade head
 The ML pipeline runs automatically when `POST /api/machines/{id}/predict` is called:
 
 1. Load latest sensor reading (or use provided values)
-2. **Preprocess** — validate bounds, impute missing values with column median
-3. **Feature engineering** — 15 features including ratios, z-scores, polynomial terms
-4. **Anomaly detection** — IsolationForest (trains on historical data)
-5. **Failure prediction** — RandomForest (rule-based fallback when no model trained)
-6. **Health score** — derived from failure probability (0–100)
-7. Persist prediction + anomaly records
+2. **Canonical mapping** — build the 15-variable representation the artifacts consume (`rotation_speed`→`rpm`, `active_power`→`power_consumption`; see `app/ml/contract.py`)
+3. **Preprocess** — artifact-carried fitted median imputation (learned on training only); no scaling, no engineered features
+4. **Anomaly detection** — IsolationForest (unsupervised, `contamination=0.05` operating assumption)
+5. **Failure prediction** — HistGradientBoostingClassifier (`class_weight='balanced'`, operating threshold `0.15`)
+6. **Health score** — derived from the failure risk score; both are risk/indicator scores, not calibrated probabilities (0–100)
+7. Persist prediction + anomaly records (`ml_status` VALID or UNAVAILABLE; never silently healthy)
 
 Train models via the scripts:
 ```bash
@@ -260,7 +262,7 @@ pytest tests/test_auth.py tests/test_ml.py -v
 | `DEBUG` | Enable debug logging + SQL echo | `false` |
 | `LOG_LEVEL` | Logging level | `INFO` |
 | `RAG_TOP_K` | Number of chunks to retrieve | `5` |
-| `ML_ANOMALY_CONTAMINATION` | Isolation Forest contamination rate | `0.1` |
+| `ML_ANOMALY_CONTAMINATION` | Legacy/unused setting; the anomaly artifact uses the fixed operating constant `0.05` | `0.1` |
 
 ---
 

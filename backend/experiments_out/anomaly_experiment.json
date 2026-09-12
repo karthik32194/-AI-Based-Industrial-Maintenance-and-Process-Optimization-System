@@ -1,0 +1,199 @@
+{
+  "meta": {
+    "seed": 42,
+    "test_frac": 0.2,
+    "dataset_hash": "7796bdba32a09391cd76b09a04f0e72cdfa5545037d01b2064b2948ff3510207"
+  },
+  "representation": [
+    {
+      "representation": "raw5",
+      "n_feats": 5,
+      "scale": "raw",
+      "test_auroc_sanity": 0.62,
+      "test_ap_sanity": 0.229,
+      "flagged_rate": 0.135
+    },
+    {
+      "representation": "raw15",
+      "n_feats": 15,
+      "scale": "raw",
+      "test_auroc_sanity": 0.602,
+      "test_ap_sanity": 0.22,
+      "flagged_rate": 0.09
+    },
+    {
+      "representation": "scaled15",
+      "n_feats": 15,
+      "scale": "std",
+      "test_auroc_sanity": 0.602,
+      "test_ap_sanity": 0.22,
+      "flagged_rate": 0.09
+    },
+    {
+      "representation": "eng15",
+      "n_feats": 15,
+      "scale": "engineered",
+      "test_auroc_sanity": 0.643,
+      "test_ap_sanity": 0.243,
+      "flagged_rate": 0.12
+    }
+  ],
+  "contamination": [
+    {
+      "contam": 0.03,
+      "flagged": 0.04,
+      "auroc_sanity": 0.602,
+      "ap_sanity": 0.22,
+      "flagged_failures_overlap": 2,
+      "true_pos": 32
+    },
+    {
+      "contam": 0.05,
+      "flagged": 0.045,
+      "auroc_sanity": 0.602,
+      "ap_sanity": 0.22,
+      "flagged_failures_overlap": 3,
+      "true_pos": 32
+    },
+    {
+      "contam": 0.08,
+      "flagged": 0.065,
+      "auroc_sanity": 0.602,
+      "ap_sanity": 0.22,
+      "flagged_failures_overlap": 4,
+      "true_pos": 32
+    },
+    {
+      "contam": 0.1,
+      "flagged": 0.09,
+      "auroc_sanity": 0.602,
+      "ap_sanity": 0.22,
+      "flagged_failures_overlap": 4,
+      "true_pos": 32
+    },
+    {
+      "contam": 0.15,
+      "flagged": 0.175,
+      "auroc_sanity": 0.602,
+      "ap_sanity": 0.22,
+      "flagged_failures_overlap": 8,
+      "true_pos": 32
+    },
+    {
+      "contam": 0.1625,
+      "flagged": 0.185,
+      "auroc_sanity": 0.602,
+      "ap_sanity": 0.22,
+      "flagged_failures_overlap": 8,
+      "true_pos": 32
+    }
+  ],
+  "stability": {
+    "flagged_rates_seeds": [
+      0.09,
+      0.1,
+      0.115,
+      0.125,
+      0.105,
+      0.105,
+      0.115,
+      0.085,
+      0.11,
+      0.095
+    ],
+    "mean": 0.105,
+    "sd": 0.012
+  },
+  "feature_contribution": [
+    {
+      "feature": "rotation_speed",
+      "flagged_mean_z": 0.665,
+      "unflagged_mean_z": -0.066,
+      "delta_z": 0.731
+    },
+    {
+      "feature": "pressure",
+      "flagged_mean_z": 0.664,
+      "unflagged_mean_z": -0.066,
+      "delta_z": 0.73
+    },
+    {
+      "feature": "current",
+      "flagged_mean_z": 0.294,
+      "unflagged_mean_z": -0.029,
+      "delta_z": 0.323
+    },
+    {
+      "feature": "vibration",
+      "flagged_mean_z": 0.293,
+      "unflagged_mean_z": -0.029,
+      "delta_z": 0.322
+    },
+    {
+      "feature": "fan_speed",
+      "flagged_mean_z": -0.255,
+      "unflagged_mean_z": 0.025,
+      "delta_z": -0.28
+    },
+    {
+      "feature": "humidity",
+      "flagged_mean_z": 0.252,
+      "unflagged_mean_z": -0.025,
+      "delta_z": 0.277
+    },
+    {
+      "feature": "oil_level",
+      "flagged_mean_z": -0.224,
+      "unflagged_mean_z": 0.022,
+      "delta_z": -0.246
+    },
+    {
+      "feature": "active_power",
+      "flagged_mean_z": -0.197,
+      "unflagged_mean_z": 0.019,
+      "delta_z": -0.216
+    },
+    {
+      "feature": "load",
+      "flagged_mean_z": 0.14,
+      "unflagged_mean_z": -0.014,
+      "delta_z": 0.154
+    },
+    {
+      "feature": "reactive_power",
+      "flagged_mean_z": -0.093,
+      "unflagged_mean_z": 0.009,
+      "delta_z": -0.102
+    },
+    {
+      "feature": "temperature",
+      "flagged_mean_z": 0.068,
+      "unflagged_mean_z": -0.007,
+      "delta_z": 0.075
+    },
+    {
+      "feature": "gearbox_temperature",
+      "flagged_mean_z": 0.057,
+      "unflagged_mean_z": -0.006,
+      "delta_z": 0.063
+    },
+    {
+      "feature": "sound_level",
+      "flagged_mean_z": -0.051,
+      "unflagged_mean_z": 0.005,
+      "delta_z": -0.056
+    },
+    {
+      "feature": "voltage",
+      "flagged_mean_z": -0.03,
+      "unflagged_mean_z": 0.003,
+      "delta_z": -0.033
+    },
+    {
+      "feature": "motor_temperature",
+      "flagged_mean_z": 0.007,
+      "unflagged_mean_z": -0.001,
+      "delta_z": 0.008
+    }
+  ]
+}

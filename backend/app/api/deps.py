@@ -2,6 +2,8 @@
 Shared FastAPI dependencies — authentication and role-based access control.
 Injected via Depends() into route handlers.
 """
+import uuid
+
 from fastapi import Depends, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -34,7 +36,14 @@ def get_current_user(
     if user_id is None:
         raise UnauthorizedException("Token payload is invalid.")
 
-    user: User | None = db.get(User, user_id)
+    # JWT subject is a string; the User PK is a UUID column. Coerce before
+    # binding so non-postgres dialects (e.g. SQLite under tests) accept it.
+    try:
+        user_uuid = uuid.UUID(str(user_id))
+    except (ValueError, AttributeError):
+        raise UnauthorizedException("Token payload is invalid.")
+
+    user: User | None = db.get(User, user_uuid)
     if user is None or not user.is_active:
         raise UnauthorizedException("User not found or account is inactive.")
 

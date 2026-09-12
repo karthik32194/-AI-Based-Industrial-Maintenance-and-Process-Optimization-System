@@ -41,6 +41,9 @@ def ingest_sensor_reading(
     provided = {k: v for k, v in raw.items() if v is not None and k in validated}
     is_valid = any(validated.get(k) is not None for k in provided)
 
+    # Phase 5: persist all 15 channels. The 5 canonical channels pass through
+    # bounds validation; the 10 raw dataset channels have no scientific bounds
+    # in the contract, so they are stored as provided (or None).
     reading = SensorReading(
         machine_id=machine_id,
         temperature=validated.get("temperature"),
@@ -48,6 +51,16 @@ def ingest_sensor_reading(
         pressure=validated.get("pressure"),
         rpm=validated.get("rpm"),
         power_consumption=validated.get("power_consumption"),
+        humidity=raw.get("humidity"),
+        voltage=raw.get("voltage"),
+        current=raw.get("current"),
+        oil_level=raw.get("oil_level"),
+        load=raw.get("load"),
+        motor_temperature=raw.get("motor_temperature"),
+        gearbox_temperature=raw.get("gearbox_temperature"),
+        sound_level=raw.get("sound_level"),
+        fan_speed=raw.get("fan_speed"),
+        reactive_power=raw.get("reactive_power"),
         source=raw.get("source", "manual"),
         is_valid=is_valid,
         timestamp=payload.timestamp or datetime.utcnow(),

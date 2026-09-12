@@ -1,0 +1,45 @@
+{
+  "threshold": 0.15,
+  "accuracy": 0.73,
+  "precision": 0.31,
+  "recall": 0.562,
+  "f1": 0.4,
+  "roc_auc": 0.789,
+  "pr_auc": 0.414,
+  "confusion": [
+    [
+      128,
+      40
+    ],
+    [
+      14,
+      18
+    ]
+  ],
+  "tp_fp_fn_tn": [
+    18,
+    40,
+    14,
+    128
+  ],
+  "features": [
+    "temperature",
+    "vibration",
+    "pressure",
+    "humidity",
+    "rotation_speed",
+    "voltage",
+    "current",
+    "oil_level",
+    "load",
+    "motor_temperature",
+    "gearbox_temperature",
+    "sound_level",
+    "fan_speed",
+    "reactive_power",
+    "active_power"
+  ],
+  "model": "HistGradientBoostingClassifier(balanced)",
+  "split": "stratified 80/20 seed42 (reserved_test.csv)",
+  "threshold_selection": "5-fold CV F1-max on train ONLY"
+}

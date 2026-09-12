@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.core.exceptions import LLMException, NotFoundException
 from app.core.logging import get_logger
 from app.models.machine import Machine
-from app.models.prediction import Prediction, RiskLevel
+from app.models.prediction import ML_STATUS_UNAVAILABLE, Prediction
 from app.models.recommendation import Recommendation, RecommendationPriority
 from app.rag.retriever import retrieve_relevant_chunks
 
@@ -135,15 +135,28 @@ def _build_machine_context(machine: Machine, prediction: Optional[Prediction]) -
         f"Status: {machine.status.value}",
     ]
     if prediction:
+        if prediction.ml_status == ML_STATUS_UNAVAILABLE:
+            lines += [
+                "",
+                "--- ML Prediction Result ---",
+                "ML Status: UNAVAILABLE",
+                f"ML Error: {prediction.ml_error or 'No ML artifact available'}",
+                "No failure-risk score was produced. Do NOT treat this machine as healthy "
+                "or low-risk on the basis of ML output; the model is unavailable.",
+                f"Anomaly Detected: {'Yes' if prediction.anomaly_detected else 'No'}",
+            ]
+        else:
+            score = prediction.failure_risk_score if prediction.failure_risk_score is not None else "N/A"
+            lines += [
+                "",
+                "--- ML Prediction Result ---",
+                f"Failure Risk Score: {score} (risk score, not a calibrated probability)",
+                f"Risk Flag: {'Yes' if prediction.risk_flag else 'No'}",
+                f"Health Score: {prediction.health_score or 'N/A'}",
+                f"Anomaly Detected: {'Yes' if prediction.anomaly_detected else 'No'}",
+                f"Model Version: {prediction.model_version or 'N/A'}",
+            ]
         lines += [
-            "",
-            "--- ML Prediction Result ---",
-            f"Failure Probability: {prediction.failure_probability:.1%}",
-            f"Risk Level: {prediction.risk_level.value}",
-            f"Health Score: {prediction.health_score or 'N/A'}",
-            f"Predicted Failure Type: {prediction.predicted_failure or 'Unknown'}",
-            f"Anomaly Detected: {'Yes' if prediction.anomaly_detected else 'No'}",
-            f"Model Version: {prediction.model_version}",
             "",
             "--- Sensor Readings at Prediction Time ---",
             f"Temperature:        {prediction.input_temperature} °C",
@@ -151,6 +164,16 @@ def _build_machine_context(machine: Machine, prediction: Optional[Prediction]) -
             f"Pressure:           {prediction.input_pressure} bar",
             f"RPM:                {prediction.input_rpm}",
             f"Power Consumption:  {prediction.input_power_consumption} kW",
+            f"Humidity:           {prediction.input_humidity}",
+            f"Voltage:            {prediction.input_voltage} V",
+            f"Current:            {prediction.input_current} A",
+            f"Oil Level:          {prediction.input_oil_level}",
+            f"Load:               {prediction.input_load}",
+            f"Motor Temperature:  {prediction.input_motor_temperature} °C",
+            f"Gearbox Temp:       {prediction.input_gearbox_temperature} °C",
+            f"Sound Level:        {prediction.input_sound_level} dB",
+            f"Fan Speed:          {prediction.input_fan_speed}",
+            f"Reactive Power:     {prediction.input_reactive_power} kVAr",
         ]
     return "\n".join(lines)
 
@@ -158,9 +181,9 @@ def _build_machine_context(machine: Machine, prediction: Optional[Prediction]) -
 def _build_rag_query(machine: Machine, prediction: Optional[Prediction]) -> str:
     parts = [f"{machine.machine_type} maintenance"]
     if prediction:
-        if prediction.predicted_failure:
-            parts.append(prediction.predicted_failure)
-        if prediction.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL):
+        if prediction.ml_status == ML_STATUS_UNAVAILABLE:
+            parts.append("model unavailable inspection")
+        if prediction.risk_flag:
             parts.append("urgent repair procedure")
         if prediction.anomaly_detected:
             parts.append("anomaly troubleshooting")
@@ -287,8 +310,8 @@ def _placeholder_response() -> dict:
         "recommendation": (
             "1. Configure OPENAI_API_KEY in the .env file to enable real AI recommendations.\n"
             "2. Review the ML prediction results and sensor readings.\n"
-            "3. Consult the maintenance manual for the predicted failure type.\n"
-            "4. Schedule an engineer inspection based on the risk level."
+            "3. Consult the maintenance manual for the relevant failure symptoms.\n"
+            "4. Schedule an engineer inspection based on the risk flag."
         ),
         "prompt_tokens": None,
         "completion_tokens": None,
@@ -298,10 +321,10 @@ def _placeholder_response() -> dict:
 def _map_risk_to_priority(prediction: Optional[Prediction]) -> RecommendationPriority:
     if prediction is None:
         return RecommendationPriority.MEDIUM
-    mapping = {
-        RiskLevel.LOW: RecommendationPriority.LOW,
-        RiskLevel.MEDIUM: RecommendationPriority.MEDIUM,
-        RiskLevel.HIGH: RecommendationPriority.HIGH,
-        RiskLevel.CRITICAL: RecommendationPriority.CRITICAL,
-    }
-    return mapping.get(prediction.risk_level, RecommendationPriority.MEDIUM)
+    if prediction.ml_status == ML_STATUS_UNAVAILABLE:
+        # ML unavailable: treat conservatively (do not downgrade to low risk),
+        # but do not invent a high risk either.
+        return RecommendationPriority.MEDIUM
+    if prediction.risk_flag:
+        return RecommendationPriority.HIGH
+    return RecommendationPriority.LOW

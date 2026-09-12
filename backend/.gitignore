@@ -52,5 +52,13 @@ Thumbs.db
 *.log
 logs/
 
+# Local/generated SQLite databases (test + scratch; never commit)
+*.db
+*.db-journal
+
+# Large serialized ML experiment artifacts (authoritative models live under models/,
+# already object-storage reserved). Keep the reports/CSV evidence, not the binaries.
+experiments_out/*.pkl
+
 # Temporary upload files
 /tmp/

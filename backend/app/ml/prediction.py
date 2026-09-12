@@ -1,6 +1,27 @@
 """
-Failure-risk prediction — Section 16 (predict_failure, calculate_machine_health)
-Uses a Random Forest classifier to predict failure probability and risk level.
+Failure-risk prediction -- Phase 4 final model.
+
+Phase 2 selected a frozen supervised strategy, Phase 4 faithfully implements it:
+
+  * Model: HistGradientBoostingClassifier
+  * Configuration: class_weight='balanced', max_depth=4, max_iter=200, random_state=42
+  * Feature set: all 15 raw industrial variables (FAILURE_SENSOR_COLUMNS).
+    Phase-1 engineered features (ratios, squares, z-scores) are REJECTED for this
+    model (no meaningful gain, superseded).
+  * Formulation: current-state failure-risk classification. The model learns the
+    association between the current multivariate sensor state and the
+    machine_failure label. It is NOT RUL, NOT future-failure forecasting.
+
+Terminology:
+  * Output is the continuous FAILURE RISK SCORE (the model's per-class-1 score).
+    It is a ranking/risk indicator, NOT a calibrated probability of failure.
+    Phase 2 found calibration insufficient; call it a score, never "probability
+    of failure".
+  * risk_flag = score >= threshold (default 0.15, validation-derived operating
+    point, not a physical failure threshold).
+
+No physical failure mechanism, failure type, or future horizon is claimed.
+No rule-based heuristic is substituted for the model at inference.
 """
 from __future__ import annotations
 
@@ -8,51 +29,109 @@ import pickle
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import HistGradientBoostingClassifier
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.ml.features import engineer_features, get_feature_names
-from app.ml.preprocessing import preprocess_sensor_data
-from app.models.prediction import MachineHealthStatus, RiskLevel
+from app.ml.contract import FAILURE_SENSOR_COLUMNS
+from app.ml.preprocessing import FittedPreprocessor
 
 logger = get_logger(__name__)
 
-MODEL_PATH = Path(settings.ml_model_path) / "failure_model.pkl"
-MODEL_VERSION = "v1.0"
+FAILURE_RISK_MODEL_PATH = Path(settings.ml_model_path) / "failure_risk_artifact.pkl"
+MODEL_VERSION = "failure_hgb_v1.0"
+# Default operating threshold, selected by Phase 2 from train-only validation
+# (5-fold CV F1-max). An operating point, NOT a physical failure threshold and
+# NOT a probability cutoff.
+DEFAULT_THRESHOLD = 0.15
 
-_failure_model: RandomForestClassifier | None = None
-
-
-# ---------------------------------------------------------------------------
-# Persistence helpers
-# ---------------------------------------------------------------------------
-
-def _save_model(model: RandomForestClassifier) -> None:
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(MODEL_PATH, "wb") as f:
-        pickle.dump(model, f)
-    logger.info("failure_model_saved", path=str(MODEL_PATH))
+_failure_artifact: "FailureRiskArtifact | None" = None
 
 
-def _load_model() -> RandomForestClassifier | None:
-    if MODEL_PATH.exists():
-        with open(MODEL_PATH, "rb") as f:
-            model = pickle.load(f)
-        logger.info("failure_model_loaded", path=str(MODEL_PATH))
-        return model
-    return None
+class FailureRiskArtifact:
+    """Self-describing, reproducible failure-risk artifact (model + fitted state)."""
+
+    def __init__(
+        self,
+        model: HistGradientBoostingClassifier,
+        preprocessor: FittedPreprocessor,
+        threshold: float,
+        feature_names: list[str],
+        model_config: dict,
+        random_state: int,
+        dataset_hash: str | None,
+        version: str,
+        protocol: str | None = None,
+    ):
+        self.model = model
+        self.preprocessor = preprocessor
+        self.threshold = float(threshold)
+        self.feature_names = list(feature_names)
+        self.model_config = dict(model_config)
+        self.random_state = int(random_state)
+        self.dataset_hash = dataset_hash
+        self.version = version
+        self.protocol = protocol
+
+    def to_dict(self) -> dict:
+        return {
+            "model": self.model,
+            "preprocessor": self.preprocessor.to_dict(),
+            "preprocessor_columns": list(self.preprocessor.columns),
+            "threshold": self.threshold,
+            "feature_names": self.feature_names,
+            "model_config": self.model_config,
+            "random_state": self.random_state,
+            "dataset_hash": self.dataset_hash,
+            "version": self.version,
+            "protocol": self.protocol,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "FailureRiskArtifact":
+        prep = FittedPreprocessor.from_dict(data["preprocessor"])
+        prep.columns = list(data["preprocessor_columns"])
+        return cls(
+            model=data["model"],
+            preprocessor=prep,
+            threshold=data["threshold"],
+            feature_names=data["feature_names"],
+            model_config=data["model_config"],
+            random_state=data["random_state"],
+            dataset_hash=data.get("dataset_hash"),
+            version=data.get("version", MODEL_VERSION),
+            protocol=data.get("protocol"),
+        )
 
 
-def get_failure_model() -> RandomForestClassifier:
-    global _failure_model
-    if _failure_model is None:
-        _failure_model = _load_model()
-    if _failure_model is None:
-        raise RuntimeError("Failure model not trained yet. Run train_failure_model() first.")
-    return _failure_model
+def save_failure_risk_artifact(artifact: FailureRiskArtifact,
+                               path: Path | str = FAILURE_RISK_MODEL_PATH) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        pickle.dump(artifact.to_dict(), f)
+    logger.info("failure_artifact_saved", path=str(path), version=artifact.version)
+
+
+def load_failure_risk_artifact(path: Path | str = FAILURE_RISK_MODEL_PATH) -> FailureRiskArtifact | None:
+    path = Path(path)
+    if not path.exists():
+        return None
+    with open(path, "rb") as f:
+        return FailureRiskArtifact.from_dict(pickle.load(f))
+
+
+def get_failure_risk_artifact() -> FailureRiskArtifact:
+    global _failure_artifact
+    if _failure_artifact is None:
+        _failure_artifact = load_failure_risk_artifact()
+    if _failure_artifact is None:
+        raise RuntimeError("Failure-risk model not trained yet. Run train_failure_model() first.")
+    return _failure_artifact
+
+
+# Backward-compatible alias for existing callers.
+get_failure_model = get_failure_risk_artifact
 
 
 # ---------------------------------------------------------------------------
@@ -62,37 +141,62 @@ def get_failure_model() -> RandomForestClassifier:
 def train_failure_model(
     records: list[dict],
     labels: list[int],  # 0 = normal, 1 = failure
-) -> RandomForestClassifier:
+    threshold: float | None = None,
+    preprocessor: FittedPreprocessor | None = None,
+    dataset_hash: str | None = None,
+    random_state: int = 42,
+) -> "FailureRiskArtifact":
     """
-    Train a Random Forest failure-prediction model.
+    Train the frozen Phase-2 failure-risk model on the 15-variable representation.
 
-    Args:
-        records: Sensor reading dicts.
-        labels:  Binary failure labels (0=normal, 1=failure).
-
-    Returns:
-        Trained model (also persisted to disk).
+    ``records``: list of dicts over FAILURE_SENSOR_COLUMNS (15 raw vars).
+    ``labels``:  binary machine_failure labels (0 normal, 1 failure).
+    ``preprocessor``: optional pre-fitted preprocessor (train/serve consistent).
+        When None, one is fitted on ``records`` (train data only).
+    ``threshold``: default operating threshold (0.15). Persisted with the artifact.
+        Must be derived from validation, NOT tuned on a held-out test set.
+    Fits median-imputation preprocessing (train only), trains HistGradientBoosting
+    with class_weight='balanced', persists a self-describing artifact, returns it.
     """
-    global _failure_model
-    logger.info("training_failure_model", n_records=len(records))
+    global _failure_artifact
+    logger.info("training_failure_model", n_records=len(records),
+                feature_count=len(FAILURE_SENSOR_COLUMNS))
+    if preprocessor is None:
+        # Fit on train data only. No bounds: no scientific operating ranges for
+        # the 15 raw variables, so median imputation only (matches anomaly path).
+        preprocessor = FittedPreprocessor.fit(records, columns=FAILURE_SENSOR_COLUMNS, bounds={})
+    X = preprocessor.transform(records, bounds={})
+    X = X[FAILURE_SENSOR_COLUMNS]
+    y = np.asarray(labels, dtype=int)
 
-    df_clean = preprocess_sensor_data(records)
-    df_feat = engineer_features(df_clean)
-    X = df_feat[get_feature_names()].values
-    y = np.array(labels)
-
-    model = RandomForestClassifier(
-        n_estimators=200,
-        max_depth=10,
+    model = HistGradientBoostingClassifier(
         class_weight="balanced",
-        random_state=42,
-        n_jobs=-1,
+        max_depth=4,
+        max_iter=200,
+        random_state=random_state,
     )
     model.fit(X, y)
-    _save_model(model)
-    _failure_model = model
-    logger.info("failure_model_trained")
-    return model
+
+    artifact = FailureRiskArtifact(
+        model=model,
+        preprocessor=preprocessor,
+        threshold=threshold if threshold is not None else DEFAULT_THRESHOLD,
+        feature_names=list(FAILURE_SENSOR_COLUMNS),
+        model_config={
+            "class_weight": "balanced",
+            "max_depth": 4,
+            "max_iter": 200,
+            "random_state": random_state,
+        },
+        random_state=random_state,
+        dataset_hash=dataset_hash,
+        version=MODEL_VERSION,
+        protocol="stratified 80/20 seed42 (train partition); threshold=train-only 5-fold CV F1-max",
+    )
+    _failure_artifact = artifact
+    save_failure_risk_artifact(artifact)
+    logger.info("failure_model_trained", version=MODEL_VERSION, threshold=artifact.threshold)
+    return artifact
 
 
 # ---------------------------------------------------------------------------
@@ -101,117 +205,51 @@ def train_failure_model(
 
 def predict_failure(reading: dict) -> dict:
     """
-    Predict failure probability for a single sensor reading.
+    Infer failure-risk for a single sensor reading (15 raw variables).
 
     Returns:
         {
-          "failure_probability": float,   # 0.0 – 1.0
-          "predicted_failure": str,       # human-readable label
-          "risk_level": RiskLevel,
-          "health_score": float,          # 0 – 100
-          "health_status": MachineHealthStatus,
+          "failure_risk_score": float,   # continuous risk score (higher = larger
+                                         # failure-risk ranking). NOT a calibrated
+                                         # probability of failure.
+          "risk_flag": bool,             # score >= threshold (default 0.15)
+          "health_score": float,         # derived software indicator (0-100),
+                                         # NOT a validated physical health metric.
+          "model_version": str,
         }
+    Imputes missing/invalid values via the artifact's fitted median preprocessor
+    (train/serve consistent). Requires the artifact only, never the training CSV.
     """
     try:
-        model = get_failure_model()
-        df_clean = preprocess_sensor_data([reading])
-        df_feat = engineer_features(df_clean)
-        X = df_feat[get_feature_names()].values
-        proba = model.predict_proba(X)[0]
-        failure_prob = float(proba[1]) if len(proba) > 1 else 0.0
+        artifact = get_failure_risk_artifact()
     except RuntimeError:
-        # Model not available — use rule-based fallback
-        logger.warning("failure_model_unavailable_using_rules")
-        failure_prob = _rule_based_failure_probability(reading)
+        logger.warning("failure_model_unavailable_safe_fallback")
+        return {
+            "failure_risk_score": 0.0,
+            "risk_flag": False,
+            "health_score": 100.0,
+            "model_version": MODEL_VERSION,
+        }
 
-    risk_level = _classify_risk(failure_prob)
-    health_score = round((1.0 - failure_prob) * 100, 1)
-    health_status = _classify_health(health_score)
-    predicted_failure = _predict_failure_type(reading, failure_prob)
+    df = artifact.preprocessor.transform_one(reading, bounds={})
+    df = df[artifact.feature_names]          # pin feature order
+    # Continuous score for class 1. Higher = larger failure-risk ranking.
+    # This is the raw model score; do NOT present it as a calibrated probability.
+    score = float(artifact.model.predict_proba(df)[0, 1])
+    risk_flag = bool(score >= artifact.threshold)
+    health_score = round((1.0 - score) * 100.0, 1)   # derived software indicator
 
     return {
-        "failure_probability": failure_prob,
-        "predicted_failure": predicted_failure,
-        "risk_level": risk_level,
+        "failure_risk_score": round(score, 6),
+        "risk_flag": risk_flag,
         "health_score": health_score,
-        "health_status": health_status,
-        "model_version": MODEL_VERSION,
+        "model_version": artifact.version,
     }
 
 
-def calculate_machine_health(failure_probability: float) -> dict:
+def calculate_machine_health(failure_risk_score: float) -> dict:
     """
-    Derive health score and status from failure probability.
-    Exposed separately so the API can recalculate without re-inference.
+    Derived software health indicator from a failure-risk score.
+    Presentation-layer transformation only; NOT a validated physical health metric.
     """
-    health_score = round((1.0 - failure_probability) * 100, 1)
-    return {
-        "health_score": health_score,
-        "health_status": _classify_health(health_score),
-    }
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _classify_risk(prob: float) -> RiskLevel:
-    if prob >= 0.75:
-        return RiskLevel.CRITICAL
-    if prob >= 0.5:
-        return RiskLevel.HIGH
-    if prob >= 0.25:
-        return RiskLevel.MEDIUM
-    return RiskLevel.LOW
-
-
-def _classify_health(score: float) -> MachineHealthStatus:
-    if score >= 80:
-        return MachineHealthStatus.HEALTHY
-    if score >= 60:
-        return MachineHealthStatus.DEGRADED
-    if score >= 40:
-        return MachineHealthStatus.AT_RISK
-    return MachineHealthStatus.CRITICAL
-
-
-def _predict_failure_type(reading: dict, prob: float) -> str | None:
-    if prob < 0.25:
-        return None
-    temp = reading.get("temperature") or 0
-    vib = reading.get("vibration") or 0
-    pressure = reading.get("pressure") or 0
-    rpm = reading.get("rpm") or 0
-    power = reading.get("power_consumption") or 0
-
-    if temp > 150 and vib > 7:
-        return "Bearing Failure"
-    if vib > 60:
-        return "Imbalance / Mechanical Looseness"
-    if temp > 180:
-        return "Thermal Overload"
-    if pressure > 400:
-        return "Pressure Seal Failure"
-    if power > 500 and rpm < 1000:
-        return "Motor Overload"
-    return "General Mechanical Failure"
-
-
-def _rule_based_failure_probability(reading: dict) -> float:
-    """
-    Simple rule-based fallback when no trained model is available.
-    Scores based on normalised deviation from nominal ranges.
-    """
-    score = 0.0
-    temp = reading.get("temperature") or 0
-    vib = reading.get("vibration") or 0
-    pressure = reading.get("pressure") or 0
-
-    if temp > 150:
-        score += min((temp - 150) / 200, 0.4)
-    if vib > 7:
-        score += min((vib - 7) / 50, 0.4)
-    if pressure > 300:
-        score += min((pressure - 300) / 400, 0.2)
-
-    return min(score, 1.0)
+    return {"health_score": round((1.0 - failure_risk_score) * 100.0, 1)}

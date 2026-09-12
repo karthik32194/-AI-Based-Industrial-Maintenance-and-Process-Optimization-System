@@ -1,7 +1,12 @@
 """
 SensorReading model — historical sensor data per machine.
 Table: sensor_readings
-Fields: temperature, vibration, pressure, rpm, power_consumption (Section 7.3)
+Fields: 15 industrial channels (5 canonical + 10 raw), Section 7.3 + Phase 5.
+
+Phase 5 expands storage from 5 to all 15 channels the ML artifacts consume
+(refer to app.ml.contract.FAILURE_SENSOR_COLUMNS). The first five use the
+canonical names (rpm, power_consumption); the remaining ten are stored under
+their dataset names because the contract provides no canonical alias for them.
 """
 import uuid
 from datetime import datetime
@@ -17,8 +22,11 @@ class SensorReading(Base, UUIDMixin):
     """
     One time-stamped sensor reading from a machine.
 
-    All five primary sensor channels from the document are stored:
-    temperature, vibration, pressure, rpm, power_consumption.
+    All 15 channels the Phase 3/Phase 4 ML artifacts consume are stored:
+    the five canonical channels (temperature, vibration, pressure, rpm,
+    power_consumption) plus the ten raw dataset channels (humidity, voltage,
+    current, oil_level, load, motor_temperature, gearbox_temperature,
+    sound_level, fan_speed, reactive_power).
     """
     __tablename__ = "sensor_readings"
 
@@ -35,6 +43,18 @@ class SensorReading(Base, UUIDMixin):
     pressure: Mapped[float | None] = mapped_column(Float, nullable=True)           # bar
     rpm: Mapped[float | None] = mapped_column(Float, nullable=True)                # rotations/min
     power_consumption: Mapped[float | None] = mapped_column(Float, nullable=True)  # kW
+
+    # Raw dataset channels (Phase 5; no canonical alias, dataset names preserved)
+    humidity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    voltage: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current: Mapped[float | None] = mapped_column(Float, nullable=True)
+    oil_level: Mapped[float | None] = mapped_column(Float, nullable=True)
+    load: Mapped[float | None] = mapped_column(Float, nullable=True)
+    motor_temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gearbox_temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sound_level: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fan_speed: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reactive_power: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Source / quality metadata
     source: Mapped[str | None] = mapped_column(String(60), nullable=True)          # e.g. "iot", "manual"

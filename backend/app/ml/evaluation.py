@@ -7,6 +7,7 @@ from __future__ import annotations
 import numpy as np
 from sklearn.metrics import (
     accuracy_score,
+    average_precision_score,
     classification_report,
     confusion_matrix,
     f1_score,
@@ -50,6 +51,11 @@ def evaluate_model(
         except ValueError as exc:
             logger.warning("roc_auc_skipped", reason=str(exc))
             metrics["roc_auc"] = None
+        try:
+            metrics["pr_auc"] = round(average_precision_score(y_true, y_proba), 4)
+        except ValueError as exc:
+            logger.warning("pr_auc_skipped", reason=str(exc))
+            metrics["pr_auc"] = None
 
     report = classification_report(y_true, y_pred, zero_division=0, output_dict=True)
     metrics["classification_report"] = report
