@@ -1,0 +1,330 @@
+{
+  "meta": {
+    "seed": 42,
+    "test_frac": 0.2,
+    "n_splits": 5,
+    "n_repeats": 3,
+    "dataset_hash": "7796bdba32a09391cd76b09a04f0e72cdfa5545037d01b2064b2948ff3510207"
+  },
+  "feature_sets": {
+    "A": {
+      "features": [
+        "temperature",
+        "vibration",
+        "pressure",
+        "rotation_speed",
+        "active_power"
+      ],
+      "n": 5,
+      "weighted": {
+        "LogisticRegression": {
+          "accuracy": 0.6654166666666668,
+          "precision": 0.27637714826682014,
+          "recall": 0.6564102564102563,
+          "f1": 0.38804564167027966,
+          "roc_auc": 0.6962877918101799,
+          "pr_auc": 0.32289097335273603,
+          "roc_auc_sd": 0.05760183215710593,
+          "pr_auc_sd": 0.05785711534443023,
+          "confusion_mean": [
+            [
+              89.4,
+              44.6
+            ],
+            [
+              8.93,
+              17.07
+            ]
+          ]
+        },
+        "RandomForest": {
+          "accuracy": 0.8116666666666666,
+          "precision": 0.37945673394522494,
+          "recall": 0.23076923076923078,
+          "f1": 0.2808922856103611,
+          "roc_auc": 0.7120933792575584,
+          "pr_auc": 0.36990016424051136,
+          "roc_auc_sd": 0.04589963782434715,
+          "pr_auc_sd": 0.04880045435079904,
+          "confusion_mean": [
+            [
+              123.87,
+              10.13
+            ],
+            [
+              20.0,
+              6.0
+            ]
+          ]
+        },
+        "HistGradientBoosting": {
+          "accuracy": 0.7604166666666665,
+          "precision": 0.2918077440634985,
+          "recall": 0.3282051282051282,
+          "f1": 0.3047580465783346,
+          "roc_auc": 0.6616150019135094,
+          "pr_auc": 0.326143644648849,
+          "roc_auc_sd": 0.05733285391428399,
+          "pr_auc_sd": 0.06358951934440367,
+          "confusion_mean": [
+            [
+              113.13,
+              20.87
+            ],
+            [
+              17.47,
+              8.53
+            ]
+          ]
+        }
+      }
+    },
+    "B": {
+      "features": [
+        "temperature",
+        "vibration",
+        "pressure",
+        "humidity",
+        "rotation_speed",
+        "voltage",
+        "current",
+        "oil_level",
+        "load",
+        "motor_temperature",
+        "gearbox_temperature",
+        "sound_level",
+        "fan_speed",
+        "reactive_power",
+        "active_power"
+      ],
+      "n": 15,
+      "weighted": {
+        "LogisticRegression": {
+          "accuracy": 0.6666666666666667,
+          "precision": 0.2706635508234365,
+          "recall": 0.6153846153846154,
+          "f1": 0.3751446565398005,
+          "roc_auc": 0.7085151167240721,
+          "pr_auc": 0.3578237025205263,
+          "roc_auc_sd": 0.04575226928052864,
+          "pr_auc_sd": 0.04830528563516163,
+          "confusion_mean": [
+            [
+              90.67,
+              43.33
+            ],
+            [
+              10.0,
+              16.0
+            ]
+          ]
+        },
+        "RandomForest": {
+          "accuracy": 0.8474999999999999,
+          "precision": 0.6507936507936508,
+          "recall": 0.12307692307692308,
+          "f1": 0.20332762029205792,
+          "roc_auc": 0.7892843474933027,
+          "pr_auc": 0.4312168793258617,
+          "roc_auc_sd": 0.03895740614881144,
+          "pr_auc_sd": 0.060872562006602855,
+          "confusion_mean": [
+            [
+              132.4,
+              1.6
+            ],
+            [
+              22.8,
+              3.2
+            ]
+          ]
+        },
+        "HistGradientBoosting": {
+          "accuracy": 0.8254166666666668,
+          "precision": 0.4541921900681491,
+          "recall": 0.3384615384615385,
+          "f1": 0.3858847534803159,
+          "roc_auc": 0.7671067738231918,
+          "pr_auc": 0.420384523975852,
+          "roc_auc_sd": 0.04542964643639157,
+          "pr_auc_sd": 0.06443279729045646,
+          "confusion_mean": [
+            [
+              123.27,
+              10.73
+            ],
+            [
+              17.2,
+              8.8
+            ]
+          ]
+        }
+      },
+      "none": {
+        "LogisticRegression": {
+          "accuracy": 0.8408333333333334,
+          "precision": 0.5483597883597883,
+          "recall": 0.11025641025641025,
+          "f1": 0.18180397652032804,
+          "roc_auc": 0.7084003061615003,
+          "pr_auc": 0.3612749870253066,
+          "roc_auc_sd": 0.04351311065257821,
+          "pr_auc_sd": 0.0458385087828503,
+          "confusion_mean": [
+            [
+              131.67,
+              2.33
+            ],
+            [
+              23.13,
+              2.87
+            ]
+          ]
+        },
+        "RandomForest": {
+          "accuracy": 0.8375000000000001,
+          "precision": 0.3,
+          "recall": 0.015384615384615385,
+          "f1": 0.029100529100529102,
+          "roc_auc": 0.7825105243015692,
+          "pr_auc": 0.425384320718081,
+          "roc_auc_sd": 0.03893676097314115,
+          "pr_auc_sd": 0.06273334807676711,
+          "confusion_mean": [
+            [
+              133.6,
+              0.4
+            ],
+            [
+              25.6,
+              0.4
+            ]
+          ]
+        },
+        "HistGradientBoosting": {
+          "accuracy": 0.83375,
+          "precision": 0.47540274540274535,
+          "recall": 0.23589743589743592,
+          "f1": 0.3115083353307321,
+          "roc_auc": 0.7556831228473019,
+          "pr_auc": 0.4055007415949183,
+          "roc_auc_sd": 0.045637764247325845,
+          "pr_auc_sd": 0.06450002293689741,
+          "confusion_mean": [
+            [
+              127.27,
+              6.73
+            ],
+            [
+              19.87,
+              6.13
+            ]
+          ]
+        }
+      }
+    },
+    "C": {
+      "features": [
+        "temperature",
+        "vibration",
+        "pressure",
+        "humidity",
+        "rotation_speed",
+        "voltage",
+        "current",
+        "oil_level",
+        "load",
+        "motor_temperature",
+        "gearbox_temperature",
+        "sound_level",
+        "fan_speed",
+        "reactive_power",
+        "active_power",
+        "temp_sq",
+        "vib_sq",
+        "temp_vib_ratio",
+        "power_per_rpm",
+        "pressure_per_rpm",
+        "motor_gearbox_delta",
+        "power_current_ratio",
+        "load_per_rpm"
+      ],
+      "n": 23,
+      "weighted": {
+        "LogisticRegression": {
+          "accuracy": 0.6754166666666666,
+          "precision": 0.277481629369394,
+          "recall": 0.6205128205128205,
+          "f1": 0.3827304810603765,
+          "roc_auc": 0.7097206276310752,
+          "pr_auc": 0.3557533829791424,
+          "roc_auc_sd": 0.04236386165477656,
+          "pr_auc_sd": 0.044486723830937706,
+          "confusion_mean": [
+            [
+              91.93,
+              42.07
+            ],
+            [
+              9.87,
+              16.13
+            ]
+          ]
+        },
+        "RandomForest": {
+          "accuracy": 0.8441666666666666,
+          "precision": 0.5696969696969697,
+          "recall": 0.14615384615384616,
+          "f1": 0.22866966654492016,
+          "roc_auc": 0.7800038270187524,
+          "pr_auc": 0.42555350620166554,
+          "roc_auc_sd": 0.03183550583095381,
+          "pr_auc_sd": 0.054174208090724034,
+          "confusion_mean": [
+            [
+              131.27,
+              2.73
+            ],
+            [
+              22.2,
+              3.8
+            ]
+          ]
+        },
+        "HistGradientBoosting": {
+          "accuracy": 0.8095833333333332,
+          "precision": 0.39182959404355283,
+          "recall": 0.3025641025641026,
+          "f1": 0.3386922182187693,
+          "roc_auc": 0.7453119020283199,
+          "pr_auc": 0.4004479278325291,
+          "roc_auc_sd": 0.042993792204050404,
+          "pr_auc_sd": 0.07111078123550213,
+          "confusion_mean": [
+            [
+              121.67,
+              12.33
+            ],
+            [
+              18.13,
+              7.87
+            ]
+          ]
+        }
+      }
+    },
+    "dummy": {
+      "accuracy": 0.7400000000000001,
+      "precision": 0.175,
+      "recall": 0.16153846153846152,
+      "f1": 0.16800000000000004,
+      "roc_auc": 0.5068886337543055,
+      "pr_auc": 0.17118589743589746
+    }
+  },
+  "leakage": {},
+  "temporal": {},
+  "threshold": {},
+  "calibration": {},
+  "importance": {}
+}
