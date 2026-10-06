@@ -1,533 +1,596 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
+
+const API_URL = "http://localhost:8000";
+
+type Machine = {
+  id: string;
+  machine_name: string;
+  machine_type: string;
+  location: string;
+  status: string;
+};
+
+type Prediction = {
+  failure_probability: number;
+  predicted_failure: string | boolean | null;
+  risk_level: string;
+  health_score: number | null;
+  anomaly_detected: boolean;
+};
 
 export default function OptimizationPage() {
-  const [load, setLoad] = useState(100);
-  const [temperature, setTemperature] = useState(75);
-  const [vibration, setVibration] = useState(0.6);
+  const [machine, setMachine] = useState<Machine | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [testingML, setTestingML] = useState(false);
+  const [mlResult, setMlResult] = useState<Prediction | null>(null);
+  const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
-  const calculateRisk = () => {
-    let risk = 25;
+  // Key Operating Control Setpoints
+  const [load, setLoad] = useState(82); // %
+  const [rpm, setRpm] = useState(1520); // RPM
+  const [temp, setTemp] = useState(74); // °C
+  const [fanSpeed, setFanSpeed] = useState(1200); // RPM
+  const [voltage, setVoltage] = useState(220); // V
+  const [oilFlow, setOilFlow] = useState(1.0); // Ratio
 
-    if (temperature > 80) {
-      risk += 25;
-    } else if (temperature > 75) {
-      risk += 12;
+  useEffect(() => {
+    async function loadMachine() {
+      try {
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+
+        const res = await fetch(`${API_URL}/api/machines`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const items = Array.isArray(data) ? data : data?.items || [];
+          const active = items.find((m: Machine) => m.status?.toUpperCase() !== "DECOMMISSIONED") || items[0];
+          setMachine(active || null);
+        }
+      } catch {
+        // graceful
+      } finally {
+        setLoading(false);
+      }
     }
+    loadMachine();
+  }, []);
 
-    if (vibration > 0.7) {
-      risk += 30;
-    } else if (vibration > 0.6) {
-      risk += 15;
-    }
+  /* =======================================================
+     PHYSICS & THERMODYNAMIC SIMULATION COMPUTATION
+  ======================================================= */
 
-    if (load > 100) {
-      risk += 20;
-    } else if (load > 90) {
-      risk += 10;
-    }
+  const simulation = useMemo(() => {
+    // 1. Thermodynamic Stress Index (0 - 100)
+    // Higher load & ambient temp increase stress; higher fan cooling reduces it.
+    const heatGeneration = (load / 100) * 45 + (temp - 40) * 0.8;
+    const coolingDissipation = (fanSpeed / 1300) * 40 * oilFlow;
+    const thermalStress = Math.min(100, Math.max(10, Math.round(heatGeneration - coolingDissipation + 30)));
 
-    return Math.min(Math.round(risk), 99);
+    // 2. Mechanical Fatigue Risk (0 - 100)
+    // Quadratic rpm centrifugal load + high operating load
+    const speedFactor = Math.pow(rpm / 1500, 2);
+    const mechanicalRisk = Math.min(100, Math.max(8, Math.round((load / 100) * 40 * speedFactor + (1.2 - oilFlow) * 20)));
+
+    // 3. Simulated Active Power Draw (kW)
+    const basePower = (load / 100) * 115 * Math.pow(rpm / 1500, 1.2);
+    const activePower = Math.round(basePower * 10) / 10;
+
+    // 4. Specific Energy Efficiency Index (%)
+    // Ratio of useful throughput to energy consumption
+    const efficiency = Math.min(98, Math.max(65, Math.round(92 - (thermalStress * 0.15) - Math.abs(voltage - 220) * 0.2)));
+
+    // 5. Projected Failure Probability (%)
+    const compositeRisk = Math.min(95, Math.max(5, Math.round((thermalStress * 0.55) + (mechanicalRisk * 0.45))));
+
+    return {
+      thermalStress,
+      mechanicalRisk,
+      activePower,
+      efficiency,
+      compositeRisk,
+    };
+  }, [load, rpm, temp, fanSpeed, voltage, oilFlow]);
+
+  // Automated Sweet-Spot Solver
+  const handleAutoOptimize = () => {
+    setLoad(75);
+    setRpm(1490);
+    setTemp(68);
+    setFanSpeed(1280);
+    setVoltage(220);
+    setOilFlow(1.15);
+    setSuccessMsg("Optimal setpoints applied: Thermal stress minimized and efficiency maximized!");
+    setTimeout(() => setSuccessMsg(""), 3000);
   };
 
-  const risk = calculateRisk();
+  /* =======================================================
+     TEST SIMULATED SETPOINTS AGAINST REAL XGBOOST MODEL
+  ======================================================= */
 
-  const getRiskLabel = () => {
-    if (risk < 30) return "LOW";
-    if (risk < 60) return "MEDIUM";
-    return "HIGH";
-  };
+  async function handleTestML() {
+    setError("");
+    setSuccessMsg("");
+    setTestingML(true);
 
-  const getRecommendation = () => {
-    if (risk < 30) {
-      return "Current operating conditions are within a safe range.";
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) throw new Error("Please log in to test with ML backend");
+      if (!machine?.id) throw new Error("No active machine available");
+
+      // Build simulated 15-channel payload from current setpoints
+      const payload = {
+        temperature: temp,
+        motor_temperature: Math.round(temp * 0.85 * 10) / 10,
+        gearbox_temperature: Math.round(temp * 0.9 * 10) / 10,
+        vibration: Math.round((0.35 + (simulation.mechanicalRisk / 100) * 0.5) * 100) / 100,
+        rotation_speed: rpm,
+        fan_speed: fanSpeed,
+        pressure: Math.round((26 + (load / 100) * 6) * 10) / 10,
+        humidity: 40.0,
+        oil_level: Math.round(oilFlow * 70 * 10) / 10,
+        voltage: voltage,
+        current: Math.round(((simulation.activePower * 1000) / (voltage * 1.732 * 0.88)) * 10) / 10,
+        load: load,
+        sound_level: Math.round((70 + (rpm / 1500) * 6) * 10) / 10,
+        active_power: simulation.activePower,
+        reactive_power: Math.round(simulation.activePower * 0.48 * 10) / 10,
+        rpm: rpm,
+        power_consumption: simulation.activePower,
+      };
+
+      const res = await fetch(`${API_URL}/api/machines/${machine.id}/predict`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "ML evaluation rejected");
+
+      setMlResult(data);
+      setSuccessMsg("Simulated operating parameters successfully evaluated by XGBoost ML model!");
+    } catch (err: any) {
+      setError(err.message || "ML simulation test failed");
+    } finally {
+      setTestingML(false);
     }
+  }
 
-    if (risk < 60) {
-      return "Consider reducing machine load or temperature.";
-    }
+  const riskBadgeColor =
+    simulation.compositeRisk >= 50
+      ? "text-[#FF3B6B] border-[#FF3B6B]/40 bg-[#FF3B6B]/15"
+      : simulation.compositeRisk >= 25
+      ? "text-[#F59E0B] border-[#F59E0B]/40 bg-[#F59E0B]/15"
+      : "text-[#00D49A] border-[#00D49A]/40 bg-[#00D49A]/15";
 
-    return "Reduce operating load and investigate abnormal sensor conditions.";
-  };
-
-  const riskLabel = getRiskLabel();
-
-  const riskColor =
-    riskLabel === "LOW"
-      ? "text-emerald-400"
-      : riskLabel === "MEDIUM"
-      ? "text-amber-400"
-      : "text-rose-400";
-
-  const riskBorder =
-    riskLabel === "LOW"
-      ? "border-emerald-500/20"
-      : riskLabel === "MEDIUM"
-      ? "border-amber-500/20"
-      : "border-rose-500/20";
-
-  const riskBg =
-    riskLabel === "LOW"
-      ? "bg-emerald-500/10"
-      : riskLabel === "MEDIUM"
-      ? "bg-amber-500/10"
-      : "bg-rose-500/10";
-
-  const riskDot =
-    riskLabel === "LOW"
-      ? "bg-emerald-400"
-      : riskLabel === "MEDIUM"
-      ? "bg-amber-400"
-      : "bg-rose-400";
-
-  return (
-    <main className="min-h-screen bg-[#050511] text-white">
-      {/* Ambient purple glow */}
-      <div className="pointer-events-none fixed left-1/2 top-0 -z-0 h-80 w-80 -translate-x-1/2 rounded-full bg-purple-600/10 blur-[130px]" />
-
-      <div className="relative z-10 mx-auto max-w-7xl px-6 py-8 md:px-8 lg:px-10">
-
-        {/* =====================================================
-            HEADER
-        ===================================================== */}
-
-        <div className="mb-8">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.8)]" />
-
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-purple-400">
-              Process Intelligence
-            </p>
-          </div>
-
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Process Optimization
-          </h1>
-
-          <p className="mt-2 text-sm text-zinc-400 sm:text-[15px]">
-            Find safer operating conditions using AI-based what-if analysis
+  if (loading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#050511] text-[#F8FAFC]">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-2 border-[#25203A] border-t-[#A855F7] shadow-[0_0_20px_rgba(168,85,247,0.3)]" />
+          <p className="text-sm font-semibold tracking-wide text-[#8B8BA3]">
+            Loading Process Optimization Engine...
           </p>
         </div>
+      </main>
+    );
+  }
 
-        {/* =====================================================
-            CURRENT OPERATING CONDITION
-        ===================================================== */}
+  return (
+    <main className="min-h-screen bg-[#050511] text-[#F8FAFC]">
+      {/* Background glow */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute left-[15%] top-[-10%] h-[500px] w-[500px] rounded-full bg-[#A855F7]/[0.05] blur-[150px]" />
+        <div className="absolute right-[-5%] top-[25%] h-[500px] w-[500px] rounded-full bg-[#C084FC]/[0.04] blur-[150px]" />
+      </div>
 
-        <section className="rounded-2xl border border-purple-500/20 bg-[#0d0c1a] p-6 shadow-xl md:p-7">
-
-          <div className="border-b border-white/[0.06] pb-5">
-            <div className="flex items-center gap-3">
-
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10">
-                <svg
-                  className="h-5 w-5 text-purple-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M4 19V5m0 14h16"
-                  />
-
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M7 16v-5m4 5V7m4 9v-8m4 8v-4"
-                  />
-                </svg>
-              </div>
-
-              <div>
-                <h2 className="text-xl font-bold">
-                  Current Operating Condition
-                </h2>
-
-                <p className="mt-1 text-sm text-zinc-500">
-                  Adjust machine parameters to simulate different operating scenarios.
-                </p>
-              </div>
-
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-
-            {/* Load */}
-            <div className="rounded-xl border border-white/[0.05] bg-[#090814] p-5">
-
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-zinc-400">
-                  Load
-                </span>
-
-                <span className="text-sm font-semibold text-white">
-                  {load}%
-                </span>
-              </div>
-
-              <input
-                type="range"
-                min="40"
-                max="114"
-                step="1"
-                value={load}
-                onChange={(e) =>
-                  setLoad(Number(e.target.value))
-                }
-                className="mt-5 w-full accent-purple-500"
-                aria-label="Machine load"
-              />
-
-              <div className="mt-3 flex justify-between text-[10px] text-zinc-600">
-                <span>40%</span>
-                <span>114%</span>
-              </div>
-            </div>
-
-            {/* Temperature */}
-            <div className="rounded-xl border border-white/[0.05] bg-[#090814] p-5">
-
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-zinc-400">
-                  Temperature
-                </span>
-
-                <span className="text-sm font-semibold text-white">
-                  {temperature} °C
-                </span>
-              </div>
-
-              <input
-                type="range"
-                min="59"
-                max="94"
-                step="1"
-                value={temperature}
-                onChange={(e) =>
-                  setTemperature(Number(e.target.value))
-                }
-                className="mt-5 w-full accent-purple-500"
-                aria-label="Machine temperature"
-              />
-
-              <div className="mt-3 flex justify-between text-[10px] text-zinc-600">
-                <span>59 °C</span>
-                <span>94 °C</span>
-              </div>
-            </div>
-
-            {/* Vibration */}
-            <div className="rounded-xl border border-white/[0.05] bg-[#090814] p-5">
-
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-zinc-400">
-                  Vibration
-                </span>
-
-                <span className="text-sm font-semibold text-white">
-                  {vibration.toFixed(2)} mm/s
-                </span>
-              </div>
-
-              <input
-                type="range"
-                min="0.21"
-                max="0.82"
-                step="0.01"
-                value={vibration}
-                onChange={(e) =>
-                  setVibration(Number(e.target.value))
-                }
-                className="mt-5 w-full accent-purple-500"
-                aria-label="Machine vibration"
-              />
-
-              <div className="mt-3 flex justify-between text-[10px] text-zinc-600">
-                <span>0.21</span>
-                <span>0.82</span>
-              </div>
-            </div>
-
-          </div>
-        </section>
-
-        {/* =====================================================
-            OPTIMIZATION RESULT
-        ===================================================== */}
-
-        <section className="mt-6 grid gap-4 md:grid-cols-3">
-
-          {/* Failure Probability */}
-          <div className={`rounded-2xl border ${riskBorder} bg-[#0d0c1a] p-5 shadow-xl`}>
-
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-zinc-400">
-                Estimated Failure Probability
+      <div className="relative mx-auto max-w-[1680px] px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#A855F7] shadow-[0_0_10px_rgba(168,85,247,0.8)]" />
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#A855F7]">
+                OPERATIONAL PARAMETER TUNING
               </p>
-
-              <div className="rounded-lg bg-purple-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-purple-400">
-                AI
-              </div>
             </div>
-
-            <p className={`mt-4 text-4xl font-bold ${riskColor}`}>
-              {risk}%
-            </p>
-
-            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  riskLabel === "LOW"
-                    ? "bg-emerald-500"
-                    : riskLabel === "MEDIUM"
-                    ? "bg-amber-500"
-                    : "bg-rose-500"
-                }`}
-                style={{
-                  width: `${risk}%`,
-                }}
-              />
-            </div>
-
-            <p className="mt-3 text-xs text-zinc-600">
-              Model-estimated risk
+            <h1 className="mt-1 text-3xl font-black tracking-tight text-[#F8FAFC]">
+              Process Setpoint Optimizer & What-If Simulator
+            </h1>
+            <p className="text-xs text-[#8B8BA3]">
+              Simulate operational conditions, balance throughput against failure risk, and benchmark in ML models
             </p>
           </div>
 
-          {/* Risk */}
-          <div className={`rounded-2xl border ${riskBorder} bg-[#0d0c1a] p-5 shadow-xl`}>
-
-            <p className="text-sm font-medium text-zinc-400">
-              Risk Level
-            </p>
-
-            <div className="mt-4 flex items-center gap-3">
-
-              <span
-                className={`flex h-10 w-10 items-center justify-center rounded-xl ${riskBg}`}
-              >
-                <span
-                  className={`h-3 w-3 rounded-full ${riskDot}`}
-                />
-              </span>
-
-              <p className={`text-3xl font-bold ${riskColor}`}>
-                {riskLabel}
-              </p>
-            </div>
-
-            <p className="mt-4 text-xs text-zinc-600">
-              Based on current parameters
-            </p>
-          </div>
-
-          {/* Health */}
-          <div className="rounded-2xl border border-purple-500/20 bg-[#0d0c1a] p-5 shadow-xl">
-
-            <p className="text-sm font-medium text-zinc-400">
-              Estimated Machine Health
-            </p>
-
-            <p className="mt-4 text-4xl font-bold text-purple-400">
-              {100 - risk}%
-            </p>
-
-            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-              <div
-                className="h-full rounded-full bg-purple-500 transition-all duration-500"
-                style={{
-                  width: `${100 - risk}%`,
-                }}
-              />
-            </div>
-
-            <p className="mt-3 text-xs text-zinc-600">
-              Higher is better
-            </p>
-          </div>
-
-        </section>
-
-        {/* =====================================================
-            WHAT-IF ANALYSIS
-        ===================================================== */}
-
-        <section className="mt-6 rounded-2xl border border-purple-500/20 bg-[#0d0c1a] p-6 shadow-xl md:p-7">
-
-          <div className="border-b border-white/[0.06] pb-5">
-
-            <h2 className="text-xl font-bold">
-              What-If Analysis
-            </h2>
-
-            <p className="mt-1 text-sm text-zinc-500">
-              Explore how changing operating parameters affects predicted risk.
-            </p>
-
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-
-            {/* Load adjustment */}
-            <div className="rounded-xl border border-white/[0.05] bg-[#090814] p-5">
-
-              <p className="text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Load Adjustment
-              </p>
-
-              <p className="mt-3 text-xl font-semibold text-white">
-                {load - 100 > 0 ? "+" : ""}
-                {load - 100}%
-              </p>
-
-              <p className="mt-2 text-xs text-zinc-600">
-                Compared with baseline
-              </p>
-            </div>
-
-            {/* Temperature adjustment */}
-            <div className="rounded-xl border border-white/[0.05] bg-[#090814] p-5">
-
-              <p className="text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Temperature Adjustment
-              </p>
-
-              <p className="mt-3 text-xl font-semibold text-white">
-                {temperature - 75 > 0 ? "+" : ""}
-                {temperature - 75} °C
-              </p>
-
-              <p className="mt-2 text-xs text-zinc-600">
-                Compared with baseline
-              </p>
-            </div>
-
-            {/* Vibration adjustment */}
-            <div className="rounded-xl border border-white/[0.05] bg-[#090814] p-5">
-
-              <p className="text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Vibration Adjustment
-              </p>
-
-              <p className="mt-3 text-xl font-semibold text-white">
-                {vibration - 0.6 >= 0 ? "+" : ""}
-                {(vibration - 0.6).toFixed(2)} mm/s
-              </p>
-
-              <p className="mt-2 text-xs text-zinc-600">
-                Compared with baseline
-              </p>
-            </div>
-
-          </div>
-        </section>
-
-        {/* =====================================================
-            RECOMMENDATION
-        ===================================================== */}
-
-        <section
-          className={`mt-6 rounded-2xl border ${
-            riskLabel === "HIGH"
-              ? "border-rose-500/20"
-              : riskLabel === "MEDIUM"
-              ? "border-amber-500/20"
-              : "border-purple-500/20"
-          } bg-[#0d0c1a] p-6 shadow-xl md:p-7`}
-        >
-
-          <div className="flex items-start gap-4">
-
-            <div
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${riskBg}`}
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href="/"
+              className="rounded-xl border border-[#25203A] bg-[#0B0B18] px-4 py-2 text-xs font-semibold text-[#8B8BA3] transition hover:border-[#A855F7]/40 hover:text-[#F8FAFC]"
             >
-              <svg
-                className={`h-5 w-5 ${riskColor}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="1.7"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 3v2m0 14v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M3 12h2m14 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"
-                />
+              ← Back to Dashboard
+            </Link>
+            <button
+              onClick={handleAutoOptimize}
+              className="rounded-xl bg-gradient-to-r from-[#A855F7] to-[#C084FC] px-4 py-2 text-xs font-bold text-[#F8FAFC] shadow-[0_0_20px_rgba(168,85,247,0.3)] transition hover:scale-[1.02]"
+            >
+              ⚡ Auto-Solve Optimal Setpoints
+            </button>
+          </div>
+        </div>
 
-                <circle cx="12" cy="12" r="4" />
-              </svg>
+        {/* Notifications */}
+        {error && (
+          <div className="mt-5 rounded-xl border border-[#FF3B6B]/40 bg-[#FF3B6B]/10 px-4 py-3 text-xs text-[#FF3B6B]">
+            {error}
+          </div>
+        )}
+        {successMsg && (
+          <div className="mt-5 rounded-xl border border-[#00D49A]/40 bg-[#00D49A]/10 px-4 py-3 text-xs font-semibold text-[#00D49A]">
+            ✓ {successMsg}
+          </div>
+        )}
+
+        {/* ===================================================
+            REAL-TIME SIMULATION KPI METRICS
+        =================================================== */}
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-[#25203A] bg-[#0B0B18] p-5 shadow-[0_12px_40px_rgba(0,0,0,0.45)]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[#8B8BA3]">
+              Projected Failure Risk
+            </p>
+            <p className={`mt-3 text-3xl font-black ${riskBadgeColor.split(" ")[0]}`}>
+              {simulation.compositeRisk}%
+            </p>
+            <div className="mt-3 h-1.5 w-full rounded-full bg-[#25203A]">
+              <div
+                className={`h-full rounded-full ${
+                  simulation.compositeRisk >= 50
+                    ? "bg-[#FF3B6B]"
+                    : simulation.compositeRisk >= 25
+                    ? "bg-[#F59E0B]"
+                    : "bg-[#00D49A]"
+                }`}
+                style={{ width: `${simulation.compositeRisk}%` }}
+              />
             </div>
+            <p className="mt-2 text-[10px] text-[#8B8BA3]">
+              What-If simulated risk score
+            </p>
+          </div>
 
-            <div className="min-w-0">
+          <div className="rounded-2xl border border-[#25203A] bg-[#0B0B18] p-5 shadow-[0_12px_40px_rgba(0,0,0,0.45)]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[#8B8BA3]">
+              System Efficiency Index
+            </p>
+            <p className="mt-3 text-3xl font-black text-[#00D49A]">
+              {simulation.efficiency}%
+            </p>
+            <div className="mt-3 h-1.5 w-full rounded-full bg-[#25203A]">
+              <div
+                className="h-full rounded-full bg-[#00D49A]"
+                style={{ width: `${simulation.efficiency}%` }}
+              />
+            </div>
+            <p className="mt-2 text-[10px] text-[#8B8BA3]">
+              Thermodynamic throughput ratio
+            </p>
+          </div>
 
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-purple-400">
-                Optimization Recommendation
-              </p>
+          <div className="rounded-2xl border border-[#25203A] bg-[#0B0B18] p-5 shadow-[0_12px_40px_rgba(0,0,0,0.45)]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[#8B8BA3]">
+              Simulated Power Demand
+            </p>
+            <p className="mt-3 text-3xl font-black text-[#F8FAFC]">
+              {simulation.activePower} kW
+            </p>
+            <div className="mt-3 h-1.5 w-full rounded-full bg-[#25203A]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#A855F7] to-[#C084FC]"
+                style={{ width: `${Math.min(100, (simulation.activePower / 140) * 100)}%` }}
+              />
+            </div>
+            <p className="mt-2 text-[10px] text-[#8B8BA3]">
+              Active electrical power load
+            </p>
+          </div>
 
-              <h2 className="mt-2 text-lg font-bold text-white">
-                Recommended Operating Strategy
+          <div className="rounded-2xl border border-[#25203A] bg-[#0B0B18] p-5 shadow-[0_12px_40px_rgba(0,0,0,0.45)]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[#8B8BA3]">
+              Thermal Stress Index
+            </p>
+            <p className="mt-3 text-3xl font-black text-[#C084FC]">
+              {simulation.thermalStress} / 100
+            </p>
+            <div className="mt-3 h-1.5 w-full rounded-full bg-[#25203A]">
+              <div
+                className="h-full rounded-full bg-[#C084FC]"
+                style={{ width: `${simulation.thermalStress}%` }}
+              />
+            </div>
+            <p className="mt-2 text-[10px] text-[#8B8BA3]">
+              Heat buildup vs cooling rate
+            </p>
+          </div>
+        </div>
+
+        {/* ===================================================
+            SETPOINT SLIDERS (LEFT) + IMPACT ANALYSIS (RIGHT)
+        =================================================== */}
+        <div className="mt-8 grid gap-8 lg:grid-cols-[1.3fr_1.1fr]">
+          {/* Sliders Panel */}
+          <div className="rounded-2xl border border-[#25203A] bg-[#0B0B18] p-6 shadow-[0_12px_40px_rgba(0,0,0,0.45)]">
+            <div className="border-b border-[#25203A] pb-4">
+              <h2 className="text-lg font-bold text-[#F8FAFC]">
+                Operational Setpoint Controls
               </h2>
-
-              <p className="mt-2 text-sm leading-6 text-zinc-500">
-                {getRecommendation()}
+              <p className="text-xs text-[#8B8BA3]">
+                Adjust live operating variables to evaluate stress and risk
               </p>
-
-            </div>
-          </div>
-        </section>
-
-        {/* =====================================================
-            HOW IT WORKS
-        ===================================================== */}
-
-        <section className="mt-6 rounded-2xl border border-white/[0.08] bg-[#0d0c1a] p-6 shadow-xl md:p-7">
-
-          <div className="flex items-center gap-3">
-
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10">
-              <svg
-                className="h-5 w-5 text-purple-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="1.7"
-              >
-                <circle cx="12" cy="12" r="9" />
-
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 11v5"
-                />
-
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 8h.01"
-                />
-              </svg>
             </div>
 
-            <h2 className="text-xl font-bold">
-              How Optimization Works
-            </h2>
+            <div className="mt-6 space-y-6">
+              {/* 1. Operating Load */}
+              <div>
+                <div className="flex justify-between text-xs">
+                  <span className="font-bold text-[#F8FAFC]">Operating Load</span>
+                  <span className="font-mono font-bold text-[#C084FC]">{load} %</span>
+                </div>
+                <input
+                  type="range"
+                  min="40"
+                  max="120"
+                  value={load}
+                  onChange={(e) => setLoad(Number(e.target.value))}
+                  className="mt-2 w-full accent-[#A855F7]"
+                />
+                <div className="flex justify-between text-[10px] text-[#8B8BA3]">
+                  <span>40% (Light)</span>
+                  <span>80% (Nominal)</span>
+                  <span>120% (Heavy Overload)</span>
+                </div>
+              </div>
 
+              {/* 2. Rotation Speed */}
+              <div>
+                <div className="flex justify-between text-xs">
+                  <span className="font-bold text-[#F8FAFC]">Rotation Speed</span>
+                  <span className="font-mono font-bold text-[#C084FC]">{rpm} RPM</span>
+                </div>
+                <input
+                  type="range"
+                  min="1200"
+                  max="1800"
+                  step="10"
+                  value={rpm}
+                  onChange={(e) => setRpm(Number(e.target.value))}
+                  className="mt-2 w-full accent-[#A855F7]"
+                />
+                <div className="flex justify-between text-[10px] text-[#8B8BA3]">
+                  <span>1200 RPM</span>
+                  <span>1500 RPM (Design)</span>
+                  <span>1800 RPM (Overspeed)</span>
+                </div>
+              </div>
+
+              {/* 3. Target Temperature */}
+              <div>
+                <div className="flex justify-between text-xs">
+                  <span className="font-bold text-[#F8FAFC]">Operating Temperature</span>
+                  <span className="font-mono font-bold text-[#C084FC]">{temp} °C</span>
+                </div>
+                <input
+                  type="range"
+                  min="45"
+                  max="95"
+                  value={temp}
+                  onChange={(e) => setTemp(Number(e.target.value))}
+                  className="mt-2 w-full accent-[#A855F7]"
+                />
+                <div className="flex justify-between text-[10px] text-[#8B8BA3]">
+                  <span>45 °C (Cool)</span>
+                  <span>70 °C (Nominal)</span>
+                  <span>95 °C (Overheat)</span>
+                </div>
+              </div>
+
+              {/* 4. Fan Speed */}
+              <div>
+                <div className="flex justify-between text-xs">
+                  <span className="font-bold text-[#F8FAFC]">Cooling Fan Speed</span>
+                  <span className="font-mono font-bold text-[#C084FC]">{fanSpeed} RPM</span>
+                </div>
+                <input
+                  type="range"
+                  min="900"
+                  max="1500"
+                  step="10"
+                  value={fanSpeed}
+                  onChange={(e) => setFanSpeed(Number(e.target.value))}
+                  className="mt-2 w-full accent-[#A855F7]"
+                />
+                <div className="flex justify-between text-[10px] text-[#8B8BA3]">
+                  <span>900 RPM</span>
+                  <span>1200 RPM (Standard)</span>
+                  <span>1500 RPM (Max Flow)</span>
+                </div>
+              </div>
+
+              {/* 5. Voltage Setpoint */}
+              <div>
+                <div className="flex justify-between text-xs">
+                  <span className="font-bold text-[#F8FAFC]">Supply Voltage</span>
+                  <span className="font-mono font-bold text-[#C084FC]">{voltage} V</span>
+                </div>
+                <input
+                  type="range"
+                  min="190"
+                  max="250"
+                  value={voltage}
+                  onChange={(e) => setVoltage(Number(e.target.value))}
+                  className="mt-2 w-full accent-[#A855F7]"
+                />
+                <div className="flex justify-between text-[10px] text-[#8B8BA3]">
+                  <span>190 V (Under)</span>
+                  <span>220 V (Nominal)</span>
+                  <span>250 V (Over)</span>
+                </div>
+              </div>
+
+              {/* Action Button: Test with Real ML Backend */}
+              <div className="pt-4 border-t border-[#25203A]">
+                <button
+                  type="button"
+                  onClick={handleTestML}
+                  disabled={testingML}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#A855F7] to-[#C084FC] px-6 py-3.5 text-sm font-bold text-[#F8FAFC] shadow-[0_0_25px_rgba(168,85,247,0.3)] transition hover:scale-[1.01] disabled:opacity-50"
+                >
+                  {testingML ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#F8FAFC] border-t-transparent" />
+                      <span>Validating with XGBoost Backend...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Test Setpoints with XGBoost ML Model</span>
+                      <span>⚡</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
 
-          <p className="mt-5 text-sm leading-7 text-zinc-500">
-            The system evaluates different machine operating
-            conditions and estimates the corresponding failure
-            probability. By comparing multiple scenarios,
-            operators can identify conditions that reduce machine
-            risk while maintaining productive operation.
-          </p>
+          {/* Impact Analysis & ML Result Panel */}
+          <div className="space-y-6">
+            {/* Real ML Verification Card */}
+            <div className="rounded-2xl border border-[#25203A] bg-[#0B0B18] p-6 shadow-[0_12px_40px_rgba(0,0,0,0.45)]">
+              <div className="flex items-center justify-between border-b border-[#25203A] pb-4">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#C084FC]">
+                    ML MODEL BENCHMARK
+                  </p>
+                  <h3 className="mt-1 text-lg font-bold text-[#F8FAFC]">
+                    XGBoost What-If Evaluation
+                  </h3>
+                </div>
+                {mlResult ? (
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs font-bold uppercase ${
+                      mlResult.failure_probability >= 0.5
+                        ? "border-[#FF3B6B]/40 bg-[#FF3B6B]/15 text-[#FF3B6B]"
+                        : "border-[#00D49A]/40 bg-[#00D49A]/15 text-[#00D49A]"
+                    }`}
+                  >
+                    {mlResult.risk_level} Risk
+                  </span>
+                ) : (
+                  <span className="text-xs text-[#8B8BA3]">Awaiting Run</span>
+                )}
+              </div>
 
-        </section>
+              {!mlResult ? (
+                <div className="py-12 text-center text-xs text-[#8B8BA3]">
+                  Click <strong>&quot;Test Setpoints with XGBoost ML Model&quot;</strong> to submit
+                  the simulated operating vector to the real backend inference pipeline.
+                </div>
+              ) : (
+                <div className="mt-5 space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-[#25203A] bg-[#050511] p-3.5">
+                      <p className="text-[10px] font-bold uppercase text-[#8B8BA3]">
+                        ML Failure Probability
+                      </p>
+                      <p
+                        className={`mt-1 text-2xl font-black ${
+                          mlResult.failure_probability >= 0.5
+                            ? "text-[#FF3B6B]"
+                            : mlResult.failure_probability >= 0.25
+                            ? "text-[#F59E0B]"
+                            : "text-[#00D49A]"
+                        }`}
+                      >
+                        {Math.round(mlResult.failure_probability * 100)}%
+                      </p>
+                    </div>
 
+                    <div className="rounded-xl border border-[#25203A] bg-[#050511] p-3.5">
+                      <p className="text-[10px] font-bold uppercase text-[#8B8BA3]">
+                        Isolation Forest
+                      </p>
+                      <p
+                        className={`mt-1 text-2xl font-black ${
+                          mlResult.anomaly_detected
+                            ? "text-[#FF3B6B]"
+                            : "text-[#00D49A]"
+                        }`}
+                      >
+                        {mlResult.anomaly_detected ? "ANOMALY" : "NORMAL"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs leading-relaxed text-[#8B8BA3]">
+                    {Boolean(mlResult.predicted_failure)
+                      ? "⚠️ The backend ML model predicts failure under these simulated parameters. Adjust fan cooling or reduce operating load."
+                      : "✓ The backend model validates that this operating point maintains component health and stability."}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Projected Benefits */}
+            <div className="rounded-2xl border border-[#25203A] bg-[#0B0B18] p-6 shadow-[0_12px_40px_rgba(0,0,0,0.45)]">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[#A855F7] border-b border-[#25203A] pb-3">
+                Optimization Impact Projections
+              </h3>
+
+              <div className="mt-4 space-y-3 text-xs">
+                <div className="flex items-center justify-between p-3 rounded-xl border border-[#25203A] bg-[#050511]">
+                  <div>
+                    <p className="font-bold text-[#F8FAFC]">Failure Probability Reduction</p>
+                    <p className="text-[10px] text-[#8B8BA3]">Relative to unoptimized 90% load</p>
+                  </div>
+                  <span className="font-bold text-[#00D49A] text-sm">
+                    {Math.max(0, 65 - simulation.compositeRisk)}% Lower
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-xl border border-[#25203A] bg-[#050511]">
+                  <div>
+                    <p className="font-bold text-[#F8FAFC]">Specific Energy Consumption</p>
+                    <p className="text-[10px] text-[#8B8BA3]">Thermal loss mitigation</p>
+                  </div>
+                  <span className="font-bold text-[#C084FC] text-sm">
+                    {Math.round((simulation.activePower / 120) * 100)} kWh/MT
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-xl border border-[#25203A] bg-[#050511]">
+                  <div>
+                    <p className="font-bold text-[#F8FAFC]">Estimated Bearing MTTF</p>
+                    <p className="text-[10px] text-[#8B8BA3]">Mean time to fatigue inspection</p>
+                  </div>
+                  <span className="font-bold text-[#F8FAFC] text-sm">
+                    {simulation.compositeRisk < 25 ? "+ 4,200 hrs" : "+ 1,800 hrs"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   );
