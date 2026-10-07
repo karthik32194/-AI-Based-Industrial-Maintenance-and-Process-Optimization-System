@@ -516,10 +516,12 @@ export default function AIAssistantPage() {
   }, []);
 
   // Auto-scroll messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
-
+ useEffect(() => {
+  const el = messagesEndRef.current?.parentElement;
+  if (el) {
+    el.scrollTop = el.scrollHeight;
+  }
+}, [messages, isTyping]);
   /* =======================================================
      GROUNDED COPILOT RESPONSE ENGINE
      Strictly grounded in real backend telemetry and models
@@ -1121,12 +1123,11 @@ export default function AIAssistantPage() {
         {/* ===================================================
             MAIN WORKSPACE: CHAT (LEFT) + INTELLIGENCE (RIGHT)
         =================================================== */}
-        <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_1.05fr] xl:grid-cols-[1.4fr_1fr]">
+       <div className="mt-6 grid min-w-0 gap-6 overflow-x-hidden lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1.05fr)] xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           {/* =================================================
               SECTION 4: MAIN AI CHAT AREA
           ================================================= */}
-          <div className="flex h-[840px] flex-col rounded-2xl border border-[#25203A] bg-[#0B0B18] shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
-            {/* Chat Header */}
+<div className="flex min-w-0 h-[840px] max-w-full flex-col overflow-hidden rounded-2xl border border-[#25203A] bg-[#0B0B18] shadow-[0_12px_40px_rgba(0,0,0,0.5)]">            {/* Chat Header */}
             <div className="flex items-center justify-between border-b border-[#25203A] px-5 py-3.5">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#A855F7]/30 bg-[#A855F7]/10 text-base text-[#C084FC]">
@@ -1305,8 +1306,7 @@ export default function AIAssistantPage() {
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Ask anything about your machine..."
-                  className="max-h-28 min-h-[44px] flex-1 resize-none rounded-xl border border-[#25203A] bg-[#050511] px-4 py-3 text-xs text-[#F8FAFC] outline-none transition focus:border-[#A855F7] scrollbar-thin"
-                />
+className="max-h-28 min-h-[44px] min-w-0 flex-1 resize-none rounded-xl border border-[#25203A] bg-[#050511] px-4 py-3 text-xs text-[#F8FAFC] outline-none transition focus:border-[#A855F7] scrollbar-thin"                />
 
                 {/* Send Button with Purple Glow */}
                 <button
