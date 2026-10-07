@@ -1123,8 +1123,7 @@ export default function AIAssistantPage() {
         {/* ===================================================
             MAIN WORKSPACE: CHAT (LEFT) + INTELLIGENCE (RIGHT)
         =================================================== */}
-       <div className="mt-6 grid min-w-0 gap-6 overflow-x-hidden lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1.05fr)] xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          {/* =================================================
+   <div className="mt-6 grid min-w-0 grid-cols-1 gap-6 overflow-x-hidden">          {/* =================================================
               SECTION 4: MAIN AI CHAT AREA
           ================================================= */}
 <div className="flex min-w-0 h-[840px] max-w-full flex-col overflow-hidden rounded-2xl border border-[#25203A] bg-[#0B0B18] shadow-[0_12px_40px_rgba(0,0,0,0.5)]">            {/* Chat Header */}
