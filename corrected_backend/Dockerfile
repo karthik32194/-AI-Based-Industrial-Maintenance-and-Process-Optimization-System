@@ -33,6 +33,7 @@ RUN uv pip install --system --no-cache \
     numpy==1.26.4 \
     scikit-learn==1.5.1 \
     joblib==1.4.2 \
+    xgboost==3.1.3 \
     openai==1.35.13 \
     langchain==0.2.6 \
     langchain-openai==0.1.14 \
